@@ -1,6 +1,11 @@
 import Vue from 'vue'
+import { LocalStorage } from 'quasar'
+import { $OidcMgr } from '../utils/oidc'
 import Router from 'vue-router'
-
+import {
+  createHistory
+} from 'vue-router'
+// import { useAuthStore } from 'stores/auth'
 Vue.use(Router)
 
 /* Layout */
@@ -96,6 +101,22 @@ export const constantRoutes = [
         meta: { title: '个人中心', icon: 'user', noCache: true }
       }
     ]
+  },
+  {
+    path: '/oidc',
+    component: () => import('layouts/OidcLayout.vue'),
+    children: [
+      {
+        path: 'call-back',
+        component: () => import('pages/oidc-page/CallBack.vue'),
+        meta: { requireAuth: false }
+      },
+      {
+        path: 'silent-renew',
+        component: () => import('pages/oidc-page/SilentRenew.vue'),
+        meta: { requireAuth: false }
+      }
+    ]
   }
 ]
 
@@ -109,11 +130,30 @@ export const asyncRoutes = [
 const createRouter = () => new Router({
   // mode: 'history', // require service support
   scrollBehavior: () => ({ y: 0 }),
-  routes: constantRoutes
+  routes: constantRoutes,
+  history: createHistory(process.env.VUE_ROUTER_BASE)
 })
 
 const router = createRouter()
 
+// 路由守卫
+router.beforeEach(async(to, from, next) => {
+  // 判断路由是否需要登录
+  if (to.matched.some((res) => res.meta.requireAuth)) {
+    // 验证localstorage中的token信息
+    if (LocalStorage.getItem('token')) {
+      // 存在token，存入user信息
+      await $OidcMgr.get_user()
+      next(true)
+    } else {
+      // token不存在，跳转登录
+      await $OidcMgr.login()
+    }
+  } else {
+    await $OidcMgr.get_user()
+    next(true)
+  }
+})
 // Detail see: https://github.com/vuejs/vue-router/issues/1234#issuecomment-357941465
 export function resetRouter() {
   const newRouter = createRouter()
